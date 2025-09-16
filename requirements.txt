@@ -3,3 +3,5 @@ gunicorn
 requests
 pydub
 flask-cors
+python-dotenv
+
