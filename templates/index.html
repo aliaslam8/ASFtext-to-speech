@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A | Text to Speech</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="top-container">
+  <h2>A H | Text to Speech</h2>
+</div>
+
+<!-- Admin API panel -->
+<button id="toggle_key_panel" class="key-button">🔐 Manage API Keys</button>
+<div id="passwordPanel" style="display:none;">
+  <input type="password" id="admin_pass" placeholder="Password">
+  <button id="unlock_keys">Unlock</button>
+</div>
+<div id="keyUploader" style="display:none;">
+  <textarea id="single_key_input" placeholder="Paste single key"></textarea>
+  <button id="save_key">➕ Save Key</button>
+  <button id="delete_key">❌ Delete First Key</button>
+  <p id="keys_status"></p>
+</div>
+
+<div class="container">
+  <div class="left-column">
+    <label>Voice:</label>
+    <select id="voice">
+      <option value="2cd15b3b-2d01-4045-9d3c-d4459fb2f265">Carl Jung</option>
+      <option value="0c8d4e6a-3e5e-4306-8e05-f9e00b0fc45a">Evy Poumporas</option>
+      <option value="0509a0a0-2667-48aa-bee4-6a8f45da3737">Mel Robbins</option>
+      <option value="1d7a9b07-fa5f-454c-a696-6fec15d17449">Denzel</option>
+      <option value="31d5bee7-d46b-4071-aaee-c3d24e0fe47c">APOLOSTE SULMAN</option>
+      <option value="55454e28-33c9-4545-9511-c0504c01f7cd">Shi Heng Yi</option>
+      <option value="50b35ae8-8e57-4661-8195-eac9603201db">Carl Junk</option>
+      <option value="9a99ce32-8a18-4fb3-b6b5-49d8993e1ecd">Elon Muck</option>
+      <option value="12a9578c-9aad-4147-8840-d29bc72890e6">Friend Voice Clone</option>
+      <option value="3d487bf5-21f8-411a-a6f9-fafa74e206c1">Brene Brown</option>
+      <option value="e2674905-8b67-4a9d-8914-05172416150a">Brene Brown 2</option>
+      <option value="84ce6ccd-7acf-4c45-8ca6-1f514ddad03c">Rena Malik</option>
+      <option value="6ac5ae69-d054-4008-82e8-3d1ed2e898bc">Cark Junk 222</option>
+    </select>
+    <label>File Name:</label>
+    <input type="text" id="file_name" placeholder="filename">
+    <label>Voice Quality:</label>
+    <select id="bitrate">
+      <option>128k</option>
+      <option selected>192k</option>
+      <option>256k</option>
+      <option>320k</option>
+    </select>
+    <label>Emotion:</label>
+    <select id="emotion">
+      <option value="">None</option>
+      <option value="angry">Angry</option>
+      <option value="cheerful">Cheerful</option>
+      <option value="sad">Sad</option>
+      <option value="surprised">Surprised</option>
+    </select>
+  </div>
+
+  <div class="right-column">
+    <label>Text:</label>
+    <textarea id="text" placeholder="Paste text or drop file..."></textarea>
+    <div id="char_count">0</div>
+    <button id="generate_btn">🎤 Generate</button>
+    <audio id="player" controls style="display:none;"></audio>
+    <p id="status"></p>
+  </div>
+</div>
+
+<script>
+const textarea=document.getElementById("text"),
+fileNameInput=document.getElementById("file_name"),
+status=document.getElementById("status"),
+player=document.getElementById("player"),
+generateBtn=document.getElementById("generate_btn");
+
+// Key panel
+document.getElementById("toggle_key_panel").onclick=()=>{document.getElementById("passwordPanel").style.display="block"};
+document.getElementById("unlock_keys").onclick=async()=>{
+  const pw=document.getElementById("admin_pass").value.trim();
+  let r=await fetch("/check_password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:pw})});
+  if(r.ok){document.getElementById("passwordPanel").style.display="none";document.getElementById("keyUploader").style.display="block";}
+};
+document.getElementById("save_key").onclick=async()=>{
+  let key=document.getElementById("single_key_input").value.trim(),pw=document.getElementById("admin_pass").value.trim();
+  let r=await fetch("/add_key",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key,pw,password:pw})});
+  if(r.ok){let d=await r.json();document.getElementById("keys_status").innerText="Total keys:"+d.total_keys;}
+};
+document.getElementById("delete_key").onclick=async()=>{
+  let pw=document.getElementById("admin_pass").value.trim();
+  let r=await fetch("/delete_key",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:pw})});
+  if(r.ok){let d=await r.json();document.getElementById("keys_status").innerText="Deleted. Keys:"+d.total;}
+};
+
+// Handle drag-drop of text files
+textarea.addEventListener("dragover",e=>{e.preventDefault();textarea.classList.add("dragover");});
+textarea.addEventListener("dragleave",()=>textarea.classList.remove("dragover"));
+textarea.addEventListener("drop",e=>{
+ e.preventDefault();textarea.classList.remove("dragover");
+ const file=e.dataTransfer.files[0];
+ if(file && file.type==="text/plain"){
+   const reader=new FileReader();
+   reader.onload=(evt)=>{textarea.value=evt.target.result;textarea.dispatchEvent(new Event("input"));};
+   reader.readAsText(file);
+   fileNameInput.value=file.name.replace(/\.[^/.]+$/,"");
+ }
+});
+
+// Char counter
+textarea.addEventListener("input",()=>{document.getElementById("char_count").innerText=textarea.value.length+" chars";});
+
+// 🎤 Generate
+generateBtn.onclick=async()=>{
+ const text=textarea.value.trim(),
+       voice=document.getElementById("voice").value,
+       fileName=fileNameInput.value.trim(),
+       bitrate=document.getElementById("bitrate").value,
+       emotion=document.getElementById("emotion").value;
+
+ if(!text){alert("Enter text");return;}
+
+ status.textContent="Generating...";generateBtn.disabled=true;
+
+ const fd=new FormData();
+ fd.append("text",text);
+ fd.append("voice_id",voice);
+ fd.append("file_name",fileName||"speech");
+ fd.append("bitrate",bitrate);
+ fd.append("emotion",emotion);
+
+ let r=await fetch("/speak",{method:"POST",body:fd});
+ if(!r.ok){
+   let d=await r.json();
+   status.textContent="Error: "+d.message;
+   generateBtn.disabled=false;
+   return;
+ }
+
+ let blob=await r.blob();
+ let url=URL.createObjectURL(blob);
+
+ // 🎯 Auto Save
+ const a=document.createElement("a");
+ a.href=url;
+ a.download=(fileName||"speech")+".mp3";
+ document.body.appendChild(a);
+ a.click();
+ a.remove();
+
+ // 👂 Auto Play
+ player.src=url;
+ player.style.display="block";
+ player.play();
+
+ status.textContent="✅ File saved & playing";
+ generateBtn.disabled=false;
+};
+</script>
+</body>
+</html>
